@@ -1,5 +1,6 @@
-﻿namespace SPG_Fachtheorie.Aufgabe3.Dtos {
-    public record PaymentDto (
+﻿namespace SPG_Fachtheorie.Aufgabe3.Dtos
+{
+    public record PaymentDto(
             int Id,
             string EmployeeFirstName,
             string EmployeeLastName,
