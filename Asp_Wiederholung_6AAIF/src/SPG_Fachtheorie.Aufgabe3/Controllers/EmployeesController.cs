@@ -59,6 +59,8 @@ namespace SPG_Fachtheorie.Aufgabe3.Controllers
                 return NotFound();  // Return 404 not found.
             return Ok(employee);
         }
+        
+      
 
         /// <summary>
         /// Reagiert auf POST /api/manager
@@ -194,5 +196,10 @@ namespace SPG_Fachtheorie.Aufgabe3.Controllers
             }
             return NoContent();
         }
+
+
+   
     }
+
+
 }

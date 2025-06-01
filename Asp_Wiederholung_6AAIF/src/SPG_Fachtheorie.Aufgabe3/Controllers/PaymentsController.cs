@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SPG_Fachtheorie.Aufgabe1.Infrastructure;
@@ -6,8 +8,15 @@ using SPG_Fachtheorie.Aufgabe1.Model;
 using SPG_Fachtheorie.Aufgabe3.Commands;
 using SPG_Fachtheorie.Aufgabe3.Dtos;
 
-namespace SPG_Fachtheorie.Aufgabe3.Controllers
+namespace SPG_Fachtheorie.Aufgabe3.Controllers;
+
+
+[Route("api/payments/[controller]")]
+[ApiController]
+
+public class PaymentsController : ControllerBase
 {
+
     [Route("api/[controller]")]  // --> /api/payments
     [ApiController]
     public class PaymentsController : ControllerBase
