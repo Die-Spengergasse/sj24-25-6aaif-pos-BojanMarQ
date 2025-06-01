@@ -16,14 +16,12 @@ namespace SPG_Fachtheorie.Aufgabe1.Model
             PaymentType = paymentType;
         }
 
-     
-        public DateTime? Confirmed{get; set;}
-
         public int Id { get; set; }
         public CashDesk CashDesk { get; set; }
         public DateTime PaymentDateTime { get; set; }
         public Employee Employee { get; set; }
         public PaymentType PaymentType { get; set; }
+        public DateTime? Confirmed { get; set; }
         public List<PaymentItem> PaymentItems { get; } = new();
     }
 }
