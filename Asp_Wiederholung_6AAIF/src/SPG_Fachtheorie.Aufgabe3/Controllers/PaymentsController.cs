@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.VisualBasic.CompilerServices;
 using SPG_Fachtheorie.Aufgabe1.Infrastructure;
 using SPG_Fachtheorie.Aufgabe1.Model;
 using SPG_Fachtheorie.Aufgabe3.Commands;
@@ -17,132 +16,248 @@ namespace SPG_Fachtheorie.Aufgabe3.Controllers;
 
 public class PaymentsController : ControllerBase
 {
-    private readonly AppointmentContext _db;
 
-    public PaymentsController(AppointmentContext db)
+    [Route("api/[controller]")]  // --> /api/payments
+    [ApiController]
+    public class PaymentsController : ControllerBase
     {
-        _db = db;
-    }
+        private readonly AppointmentContext _db;
 
-    [HttpGet]
-    public ActionResult<List<PaymentDto>> GetPayments([FromQuery] int? cashDesk, [FromQuery] DateTime? dateFrom)
-    {
-        /*
-         * .Where(p => cashDesk.HasValue ? p.CashDesk.Number == cashDesk.Value : true)
-         * .Where(p => dateFrom.HasValue ? p.PaymentDateTime >= dateFrom.Value : true)
-         */
-        return Ok(_db.Payments
-            .Where(p => cashDesk.HasValue ? p.CashDesk.Number == cashDesk.Value : true)
-            .Where(p => dateFrom.HasValue ? p.PaymentDateTime >= dateFrom.Value : true)
-            .Select(e => new PaymentDto(
-            e.Id,
-            e.Employee.FirstName,
-            e.Employee.LastName,
-            e.CashDesk.Number,
-            e.PaymentType.ToString(),
-            e.PaymentItems.Select(s => s.Price).Sum()
-        )).ToList());
-    }
-
-    [HttpGet("id")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult<PaymentDto> GetPaymentById([FromQuery] int id)
-    {
-        var payment = _db.Payments
-            .Where(e => e.Id == id)
-            .Select(e => new PaymentDetailDto(
-                e.Id,
-                e.Employee.FirstName,
-                e.Employee.LastName,
-                e.CashDesk.Number,
-                e.PaymentType.ToString(),
-                e.PaymentItems.Select(p => new PaymentItemDto(
-                    p.ArticleName,
-                    p.Amount,
-                    p.Price
-                )).ToList()
-            ))
-            .AsNoTracking()
-            .FirstOrDefault();
-        if (payment is null)
+        public PaymentsController(AppointmentContext db)
         {
-            return NotFound();
+            _db = db;
         }
-        return Ok(payment);
-    }
+        private readonly AppDbContext _context;
 
-    [HttpPost]
-    [ProducesResponseType(StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public ActionResult<int> CreatePayment([FromBody] NewPaymentCommand paymentCmd)
-    {
-        CashDesk cashDesk = _db.CashDesks.FirstOrDefault(a => a.Number == paymentCmd.CashDeskNumber);
-        Employee employee =
-            _db.Employees.FirstOrDefault(e => e.RegistrationNumber == paymentCmd.EmployeeRegistrationNumber);
-        var isPayment = Enum.TryParse<PaymentType>(paymentCmd.PaymentType, true, out PaymentType paymentType);
-        if (cashDesk is null)
+        public PaymentsController(AppDbContext context)
         {
-            return BadRequest("Cash desk not found");
+            _context = context;
         }
 
-        if (employee is null)
+        /// <summary>
+        /// GET /api/payments
+        /// </summary>
+        /// <returns></returns>
+        [HttpGet]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public ActionResult<List<PaymentDto>> GetAllPayments(
+            [FromQuery] int? cashDesk, [FromQuery] DateTime? dateFrom)
         {
-            return BadRequest("Employee not found");
+            var payments = _db.Payments
+                .Where(p =>
+                    cashDesk.HasValue
+                        ? p.CashDesk.Number == cashDesk.Value : true)
+                .Where(p =>
+                    dateFrom.HasValue
+                        ? p.PaymentDateTime >= dateFrom.Value : true)
+                .Select(p => new PaymentDto(
+                    p.Id, p.Employee.FirstName, p.Employee.LastName,
+                    p.PaymentDateTime,
+                    p.CashDesk.Number, p.PaymentType.ToString(),
+                    p.PaymentItems.Sum(p => p.Amount)))
+                .ToList();
+            return Ok(payments);
         }
 
-        if (!isPayment)
+        [HttpGet("{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public ActionResult<PaymentDetailDto> GetPaymentDetail(int id)
         {
-            return BadRequest("Invalid payment type");
+            var payment = _db.Payments
+                .Where(p => p.Id == id)
+                .Select(p => new PaymentDetailDto(
+                    p.Id, p.Employee.FirstName, p.Employee.LastName,
+                    p.CashDesk.Number, p.PaymentType.ToString(),
+                    p.PaymentItems
+                        .Select(pi => new PaymentItemDto(
+                            pi.ArticleName, pi.Amount, pi.Price))
+                        .ToList()
+                    ))
+                .FirstOrDefault();
+            if (payment is null)
+                return NotFound();
+            return Ok(payment);
         }
 
-        var payment = new Payment(cashDesk, DateTime.Now, employee, Enum.Parse<PaymentType>(paymentCmd.PaymentType));
-        try
+        /// <summary>
+        /// POST /api/payments
+        /// </summary>
+        [HttpPost]
+        [ProducesResponseType(StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public IActionResult AddPayment(NewPaymentCommand cmd)
         {
+            var cashDesk = _db.CashDesks.FirstOrDefault(c => c.Number == cmd.CashDeskNumber);
+            if (cashDesk is null) return Problem("Invalid cash desk", statusCode: 400);
+            var employee = _db.Employees.FirstOrDefault(e => e.RegistrationNumber == cmd.EmployeeRegistrationNumber);
+            if (employee is null) return Problem("Invalid employee", statusCode: 400);
+
+            if (!Enum.TryParse<PaymentType>(cmd.PaymentType, out var paymentType))
+                return Problem("Invalid payment type", statusCode: 400);
+
+            var payment = new Payment(
+                cashDesk, cmd.PaymentDateTime, employee, paymentType);
             _db.Payments.Add(payment);
-            _db.SaveChanges();
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine(e);
-            throw;
+            try
+            {
+                _db.SaveChanges();
+            }
+            catch (DbUpdateException e)
+            {
+                return Problem(e.InnerException?.Message ?? e.Message);
+            }
+            return CreatedAtAction(nameof(AddPayment), new { Id = payment.Id });
         }
 
-        return CreatedAtAction(nameof(CreatePayment), new { id = payment.Id }, payment.Id);
-    }
-
-    [HttpDelete("{id}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType((StatusCodes.Status400BadRequest))]
-    public ActionResult<int> DeletePayment(int id, [FromQuery] bool? deleteItems)
-    {
-        try
+        /// <summary>
+        /// DELETE /api/payments/{id}?deleteItems=true|false
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns></returns>
+        [HttpDelete("{id}")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public IActionResult DeletePayment(int id, [FromQuery] bool deleteItems)
         {
             var payment = _db.Payments.FirstOrDefault(p => p.Id == id);
-            if (payment is null)
+            if (payment is null) return NoContent();
+            var paymentItems = _db.PaymentItems.Where(p => p.Payment.Id == id).ToList();
+            if (paymentItems.Any() && deleteItems)
             {
-                return NotFound();
+                try
+                {
+                    _db.PaymentItems.RemoveRange(paymentItems);
+                    _db.SaveChanges();
+                }
+                catch (DbUpdateException e)
+                {
+                    return Problem(e.InnerException?.Message ?? e.Message, statusCode: 400);
+                }
+                catch (InvalidOperationException e)
+                {
+                    return Problem(
+                        e.InnerException?.Message ?? e.Message,
+                        statusCode: StatusCodes.Status400BadRequest);
+                }
             }
-
-            if (deleteItems is true)
+            try
             {
-                var paymentItems = _db.PaymentItems.Where(p => p.Payment.Id == id).ToList();
-                _db.RemoveRange(paymentItems);
-                _db.Remove(payment);
+                _db.Payments.Remove(payment);
                 _db.SaveChanges();
-                return NoContent();
             }
-            else
+            catch (DbUpdateException e)
             {
-                return BadRequest("Payment has payment items!");
+                return Problem(e.InnerException?.Message ?? e.Message, statusCode: 400);
+            }
+            catch (InvalidOperationException e)
+            {
+                return Problem(
+                    e.InnerException?.Message ?? e.Message,
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+            return NoContent();
+        }
+
+        [HttpPut("{id}")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public IActionResult UpdatePayment(int id, UpdatePaymentCommand cmd)
+        {
+            var payment = _db.Payments.FirstOrDefault(p => p.Id == id);
+            if (payment is null) return NotFound();
+
+            var cashDesk = _db.CashDesks.FirstOrDefault(c => c.Number == cmd.CashDeskNumber);
+            if (cashDesk is null) return Problem("Invalid cash desk", statusCode: 400);
+
+            var employee = _db.Employees.FirstOrDefault(e => e.RegistrationNumber == cmd.EmployeeRegistrationNumber);
+            if (employee is null) return Problem("Invalid employee", statusCode: 400);
+
+            if (!Enum.TryParse<PaymentType>(cmd.PaymentType, out var paymentType))
+                return Problem("Invalid payment type", statusCode: 400);
+
+            if (paymentItem.LastUpdated != command.LastUpdated)
+                return Problem("Payment item has changed", statusCode: 400);
+
+            if(id != cmd.Id)
+                return Problem("Payment ID mismatch", statusCode: 400);
+
+            [HttpGet("{paymentId}")]
+            public IActionResult GetPaymentById(Guid paymentId)
+            {
+                // Versuche, das Objekt mit der paymentId zu finden
+                var payment = _paymentService.GetPaymentById(paymentId);
+
+                if (payment == null)
+                {
+                    // Wenn das Objekt nicht gefunden wird, gib einen 400-Fehler zurück
+                    return BadRequest(new { message = "Invalid payment ID" });
+                }
+
+                // Wenn das Objekt gefunden wird, gib es zurück
+                return Ok(payment);
+            }
+            ublic class PaymentUpdateDto
+        {
+            public decimal Amount { get; set; }
+            public string Description { get; set; }
+        }
+
+        [HttpPatch("{id}")]
+        public IActionResult PatchConfirmed(Guid id, [FromBody] UpdateConfirmedCommand command)
+        {
+            // Validierung des Commands
+            var validationResults = new List<ValidationResult>();
+            var validationContext = new ValidationContext(command);
+            if (!Validator.TryValidateObject(command, validationContext, validationResults, true))
+            {
+                return ValidationProblem(new ValidationProblemDetails(
+                    validationResults.ToDictionary(
+                        v => v.MemberNames.FirstOrDefault() ?? "Confirmed",
+                        v => new[] { v.ErrorMessage ?? "Invalid value" }
+                    )
+                ));
             }
 
+            // Payment suchen
+            var payment = _paymentService.GetPaymentById(id);
+            if (payment == null)
+            {
+                return Problem("Payment not found", statusCode: 404);
+            }
+
+            // Bereits bestätigt?
+            if (payment.Confirmed != null)
+            {
+                return Problem("Payment already confirmed", statusCode: 400);
+            }
+
+            // Aktualisieren
+            payment.Confirmed = command.Confirmed;
+            _paymentService.UpdatePayment(payment);
+
+            return NoContent();
         }
-        catch (Exception e)
-        {
-            Console.WriteLine(e);
-            throw;
+    }
+
+
+        payment.CashDesk = cashDesk;
+            payment.Employee = employee;
+            payment.PaymentDateTime = cmd.PaymentDateTime;
+            payment.PaymentType = paymentType;
+            paymentItem.LastUpdated = DateTime.UtcNow;
+
+
+            try
+            {
+                _db.SaveChanges();
+            }
+            catch (DbUpdateException e)
+            {
+                return Problem(e.InnerException?.Message ?? e.Message, statusCode: 400);
+            }
+            return NoContent();
         }
     }
 }
