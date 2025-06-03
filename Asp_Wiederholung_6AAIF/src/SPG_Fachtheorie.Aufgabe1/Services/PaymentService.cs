@@ -112,5 +112,10 @@ namespace SPG_Fachtheorie.Aufgabe1.Services
                 throw new EmployeeServiceException(e.InnerException?.Message ?? e.Message);
             }
         }
+
+        public void DeletePaymentItem(int id)
+        {
+            throw new NotImplementedException();
+        }
     }
 }
