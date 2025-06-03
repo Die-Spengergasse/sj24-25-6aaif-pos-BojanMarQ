@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SPG_Fachtheorie.Aufgabe1\SPG_Fachtheorie.Aufgabe1.csproj" />
+    <ProjectReference Include="..\..\src\SPG_Fachtheorie.Aufgabe3\SPG_Fachtheorie.Aufgabe3.csproj" />
   </ItemGroup>
 
 </Project>
